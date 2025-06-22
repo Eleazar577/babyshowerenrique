@@ -1,0 +1,151 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Confirmación de Asistencia</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 420px;
+      margin: 40px auto;
+      padding: 20px;
+      border: 2px solid #ccc;
+      border-radius: 10px;
+    }
+
+    label {
+      display: block;
+      margin-top: 15px;
+    }
+
+    input, select, textarea, button {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+    }
+
+    button {
+      background-color: #25D366;
+      color: white;
+      font-size: 16px;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #1ebe5d;
+    }
+
+    .oculto {
+      display: none;
+    }
+
+    .error {
+      color: red;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Hola! Confirma tu asistencia a mi Baby Shower, Enrique Emmanuel :)</h2>
+
+<form id="rsvpForm">
+  <label for="nombreCompleto">Nombre y Apellido:</label>
+  <input type="text" id="nombreCompleto" placeholder="Ej: José Pérez" required>
+  <div id="errorNombre" class="error oculto">Nombre no encontrado en la lista de invitados.</div>
+
+  <label for="respuesta">¿Asistirás?</label>
+  <select id="respuesta" required>
+    <option value="">Selecciona una opción</option>
+    <option value="Sí asistiré">Sí asistiré</option>
+    <option value="No asistiré">Lo siento, No podre asistir</option>
+  </select>
+
+  <div id="seleccionInvitados" class="oculto">
+    <label for="adultos">Número de adultos:</label>
+    <select id="adultos"></select>
+
+    <label for="ninos">Número de niños:</label>
+    <select id="ninos"></select>
+  </div>
+
+  <label for="comentarios">Comentarios:</label>
+  <textarea id="comentarios" rows="3" placeholder="Escribe un mensaje..."></textarea>
+
+  <button type="submit">Enviar por WhatsApp</button>
+</form>
+
+<script>
+  function normalizarTexto(texto) {
+    return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  }
+
+  const invitados = {
+    "jose perez": { maxAdultos: 2, maxNinos: 1 },
+    "ana luna": { maxAdultos: 1, maxNinos: 2 },
+    "carlos ruiz": { maxAdultos: 3, maxNinos: 0 },
+    "maria torres": { maxAdultos: 2, maxNinos: 2 }
+  };
+
+  const nombreInput = document.getElementById('nombreCompleto');
+  const errorNombre = document.getElementById('errorNombre');
+  const seleccionInvitados = document.getElementById('seleccionInvitados');
+  const adultosSelect = document.getElementById('adultos');
+  const ninosSelect = document.getElementById('ninos');
+
+  nombreInput.addEventListener('blur', () => {
+    const nombreIngresado = normalizarTexto(nombreInput.value);
+    const datosInvitado = invitados[nombreIngresado];
+
+    if (datosInvitado) {
+      errorNombre.classList.add('oculto');
+      seleccionInvitados.classList.remove('oculto');
+
+      adultosSelect.innerHTML = '';
+      for (let i = 0; i <= datosInvitado.maxAdultos; i++) {
+        adultosSelect.innerHTML += `<option value="${i}">${i}</option>`;
+      }
+
+      ninosSelect.innerHTML = '';
+      for (let i = 0; i <= datosInvitado.maxNinos; i++) {
+        ninosSelect.innerHTML += `<option value="${i}">${i}</option>`;
+      }
+    } else {
+      seleccionInvitados.classList.add('oculto');
+      errorNombre.classList.remove('oculto');
+    }
+  });
+
+  document.getElementById('rsvpForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const nombreOriginal = nombreInput.value.trim();
+    const nombreNormalizado = normalizarTexto(nombreOriginal);
+
+    const datosInvitado = invitados[nombreNormalizado];
+    if (!datosInvitado) {
+      errorNombre.classList.remove('oculto');
+      return;
+    }
+
+    const respuesta = document.getElementById('respuesta').value;
+    const adultos = adultosSelect.value;
+    const ninos = ninosSelect.value;
+    const comentarios = document.getElementById('comentarios').value.trim();
+
+    const numeroWhatsApp = "522282521819";
+
+    const mensaje = `Hola, soy ${nombreOriginal}.
+"${respuesta}".
+Asistiremos ${adultos} adulto(s) y ${ninos} niño(s).
+Comentarios: ${comentarios || 'Sin comentarios'}`;
+
+    const url = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(mensaje)}`;
+    window.open(url, '_blank');
+  });
+</script>
+
+</body>
+</html>
