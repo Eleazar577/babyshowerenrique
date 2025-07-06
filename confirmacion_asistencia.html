@@ -1,66 +1,89 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Confirmación de Asistencia</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 420px;
-      margin: 40px auto;
+      max-width: 480px;
+      margin: 20px auto;
       padding: 20px;
       border: 2px solid #ccc;
       border-radius: 10px;
+      background-color: #f9f9f9;
     }
-
-    label {
-      display: block;
-      margin-top: 15px;
-    }
-
+    h2 { text-align: center; color: #333; }
+    label { display: block; margin-top: 15px; }
     input, select, textarea, button {
-      width: 100%;
-      padding: 8px;
-      margin-top: 5px;
+      width: 100%; padding: 12px; margin-top: 5px;
+      font-size: 16px; box-sizing: border-box;
     }
-
+    input.valido { border: 2px solid #25D366; }
+    input.invalido { border: 2px solid red; }
     button {
-      background-color: #25D366;
-      color: white;
-      font-size: 16px;
-      border: none;
+      background-color: #25D366; color: white;
+      font-size: 18px; border: none; cursor: pointer;
+      margin-top: 20px; padding: 14px; border-radius: 6px;
+      transition: background-color 0.3s ease;
+    }
+    button:hover:enabled { background-color: #1ebe5d; }
+    button:disabled { background-color: #ccc; cursor: not-allowed; }
+    .oculto { display: none; }
+    .error { color: red; font-size: 0.9em; margin-top: 4px; }
+    .mensaje-confirmacion {
+      margin-top: 15px; padding: 12px;
+      background-color: #e6ffed; border: 1px solid #25D366;
+      color: #1c5d3f; border-radius: 5px; text-align: center;
+      font-weight: bold; display: none;
+    }
+
+    /* Estilos para el nuevo autocompletado */
+    .autocomplete-suggestions {
+      border: 1px solid #ccc;
+      max-height: 150px;
+      overflow-y: auto;
+      /* Ajuste de posición: Si el input está dentro de un contenedor con 'position: relative',
+         puedes usar 'position: absolute' aquí para que las sugerencias floten justo debajo.
+         Si el input no está en un contenedor, 'position: relative' en un padre común
+         o 'position: fixed' podría ser necesario para que funcione bien en scroll.
+         Para este ejemplo, 'position: absolute' es suficiente si el 'body' no tiene padding que lo desplace.*/
+      position: absolute; 
+      z-index: 99; /* Asegura que esté por encima de otros elementos */
+      background-color: white;
+      /* Ajustar al ancho del input y tener en cuenta el padding del body si lo hay */
+      width: calc(100% - 40px); 
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      border-top: none; /* Que no tenga borde superior para unirse al input visualmente */
+    }
+    .autocomplete-suggestion-item {
+      padding: 10px;
       cursor: pointer;
+      border-bottom: 1px solid #eee;
     }
-
-    button:hover {
-      background-color: #1ebe5d;
+    .autocomplete-suggestion-item:last-child {
+      border-bottom: none;
     }
-
-    .oculto {
-      display: none;
-    }
-
-    .error {
-      color: red;
-      font-size: 0.9em;
+    .autocomplete-suggestion-item:hover,
+    .autocomplete-suggestion-item.active { /* Para navegación con teclado */
+      background-color: #f0f0f0;
     }
   </style>
 </head>
 <body>
-
 <h2>Hola! Confirma tu asistencia a mi Baby Shower, Enrique Emmanuel :)</h2>
-
 <form id="rsvpForm">
   <label for="nombreCompleto">Nombre y Apellido:</label>
-  <input type="text" id="nombreCompleto" placeholder="Ej: José Pérez" required>
-  <div id="errorNombre" class="error oculto">Nombre no encontrado en la lista de invitados.</div>
+  <input type="text" id="nombreCompleto" placeholder="Ej: José Pérez" required autocomplete="off" />
+  <div id="autocompleteSuggestions" class="autocomplete-suggestions oculto"></div>
+  <div id="errorNombre" class="error oculto">Nombre no encontrado.</div>
 
   <label for="respuesta">¿Asistirás?</label>
   <select id="respuesta" required>
     <option value="">Selecciona una opción</option>
     <option value="Sí asistiré">Sí asistiré</option>
-    <option value="No asistiré">Lo siento, No podre asistir</option>
+    <option value="No asistiré">Lo siento, no podré asistir</option>
   </select>
 
   <div id="seleccionInvitados" class="oculto">
@@ -71,81 +94,496 @@
     <select id="ninos"></select>
   </div>
 
-  <label for="comentarios">Comentarios:</label>
+  <div id="sugerenciasAcompanantes" class="oculto">
+    <h4>Acompañantes:</h4>
+    <div id="camposAcompanantes"></div>
+  </div>
+
+  <label for="comentarios">Mensaje:</label>
   <textarea id="comentarios" rows="3" placeholder="Escribe un mensaje..."></textarea>
 
-  <button type="submit">Enviar por WhatsApp</button>
+  <button type="submit" id="btnEnviar" disabled>Enviar por WhatsApp</button>
 </form>
+<div class="mensaje-confirmacion" id="mensajeConfirmacion">
+  ¡Gracias por confirmar tu asistencia!
+</div>
 
 <script>
-  function normalizarTexto(texto) {
+  const invitados = {
+    "cristian garcia": {
+      maxAdultos: 2,
+      maxNinos: 1,
+      acompanantes: ["Adriana", "Issac"]
+    },
+    "eugenia rodriguez": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "yoselin torres": {
+      maxAdultos: 3,
+      maxNinos: 1,
+      acompanantes: ["Antonio", "Ana", "Gustavo"]
+    },
+    "alicia aburto": {
+      maxAdultos: 2,
+      maxNinos: 0,
+      acompanantes: ["Eliezer Garcia"]
+    },
+    "yareli del moral": {
+      maxAdultos: 3,
+      maxNinos: 1,
+      acompanantes: ["Erasmo", "Eric", "Marcus"]
+    },
+    "rosalia hernandez": {
+      maxAdultos: 2,
+      maxNinos: 0,
+      acompanantes: ["acompañante"]
+    },
+    "adriana hernandez": {
+      maxAdultos: 3,
+      maxNinos: 0,
+      acompanantes: ["Paul", "Danna"]
+    },
+    "lourdes hernandez": {
+      maxAdultos: 2,
+      maxNinos: 0,
+      acompanantes: ["Abuela Salome"]
+    },
+    "aide vela": {
+      maxAdultos: 2,
+      maxNinos: 1,
+      acompanantes: ["Dante", "Kiliam"]
+    },
+    "ana zumaya": {
+      maxAdultos: 2,
+      maxNinos: 0,
+      acompanantes: ["benito rodriguez"]
+    },
+    "angel galan": {
+      maxAdultos: 3,
+      maxNinos: 0,
+      acompanantes: ["Erika galan", "evelyn"]
+    },
+    "susana fuentes": {
+      maxAdultos: 3,
+      maxNinos: 1,
+      acompanantes: ["Blandina Aburto", "Carlos Fuentes", "Matias"]
+    },
+    "elizabeth sanchez": {
+      maxAdultos: 1,
+      maxNinos: 1,
+      acompanantes: ["Ali Uriel"]
+    },
+    "isabel garcia": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "ana aburto": {
+      maxAdultos: 2,
+      maxNinos: 0,
+      acompanantes: ["Mateo Perez"]
+    },
+    "aurora aburto": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "alejandra del moral": {
+      maxAdultos: 2,
+      maxNinos: 1,
+      acompanantes: ["Ernesto", "Netito"]
+    },
+    "valentina sanchez": {
+      maxAdultos: 1,
+      maxNinos: 2,
+      acompanantes: ["Alfredo", "Santiago"]
+    },
+    "carlos villanueva": {
+      maxAdultos: 2,
+      maxNinos: 0,
+      acompanantes: ["Alma"]
+    },
+    "rosalinda lopez": {
+      maxAdultos: 2,
+      maxNinos: 0,
+      acompanantes: ["Hector Silva Vega"]
+    },
+    "eduardo suarez": {
+      maxAdultos: 2,
+      maxNinos: 0,
+      acompanantes: ["Antonio tio"]
+    },
+    "maria de la paz aburto": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "ivonne flores": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "norma riso": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "ana riso": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "josefa riso": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "leda coral": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "mariana diaz": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "tere garcia": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "martha cruz": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "reyna hernandez": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "blanca dorantes": {
+      maxAdultos: 2,
+      maxNinos: 0,
+      acompanantes: ["Rodolfo sangabriel"]
+    },
+    "laura filoteo": {
+      maxAdultos: 2,
+      maxNinos: 1,
+      acompanantes: ["Felipe", "Laurita"]
+    },
+    "maricela hernandez": {
+      maxAdultos: 2,
+      maxNinos: 1,
+      acompanantes: ["Mama Maricela", "Julieta"]
+    },
+    "silvia hernandez": {
+      maxAdultos: 2,
+      maxNinos: 0,
+      acompanantes: ["Rafael Hernandez Carmona"]
+    },
+    "claudia aburto": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "beatriz soriano": {
+      maxAdultos: 1,
+      maxNinos: 0,
+      acompanantes: [""]
+    },
+    "carolina hernandez": {
+      maxAdultos: 4,
+      maxNinos: 0,
+      acompanantes: ["Alberto", "Irving", "Mildred"]
+    },
+    "sonia hernandez": {
+      maxAdultos: 4,
+      maxNinos: 1,
+      acompanantes: ["Piter", "cielo", "sol", "bebe sonia"]
+    },
+    "rafael hernandez": {
+      maxAdultos: 3,
+      maxNinos: 1,
+      acompanantes: ["Paloma", "Socorro", "Ishan Daenerys"]
+    }
+  };
+
+  const nombreInput = document.getElementById("nombreCompleto");
+  const respuestaSelect = document.getElementById("respuesta");
+  const adultosSelect = document.getElementById("adultos");
+  const ninosSelect = document.getElementById("ninos");
+  const errorNombre = document.getElementById("errorNombre");
+  const seleccionInvitados = document.getElementById("seleccionInvitados");
+  const sugerenciasDiv = document.getElementById("sugerenciasAcompanantes");
+  const camposDiv = document.getElementById("camposAcompanantes");
+  const btnEnviar = document.getElementById("btnEnviar");
+  const mensajeConfirmacion = document.getElementById("mensajeConfirmacion");
+
+  // Referencia al div donde se mostrarán las sugerencias de autocompletado
+  const autocompleteSuggestionsDiv = document.getElementById("autocompleteSuggestions");
+  let currentActiveSuggestion = -1; // Para la navegación con teclado
+
+  // Función para normalizar texto (quitar acentos, convertir a minúsculas, limpiar espacios)
+  function normalizar(texto) {
     return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
   }
 
-  const invitados = {
-    "jose perez": { maxAdultos: 2, maxNinos: 1 },
-    "ana luna": { maxAdultos: 1, maxNinos: 2 },
-    "carlos ruiz": { maxAdultos: 3, maxNinos: 0 },
-    "maria torres": { maxAdultos: 2, maxNinos: 2 }
-  };
+  /**
+   * Muestra las sugerencias de nombres en el div de autocompletado.
+   * @param {string} inputValue El texto actual en el campo de entrada del nombre.
+   */
+  function showSuggestions(inputValue) {
+    const inputValueNormalizado = normalizar(inputValue);
+    autocompleteSuggestionsDiv.innerHTML = ''; // Limpia sugerencias anteriores
+    autocompleteSuggestionsDiv.classList.add('oculto'); // Oculta por defecto
 
-  const nombreInput = document.getElementById('nombreCompleto');
-  const errorNombre = document.getElementById('errorNombre');
-  const seleccionInvitados = document.getElementById('seleccionInvitados');
-  const adultosSelect = document.getElementById('adultos');
-  const ninosSelect = document.getElementById('ninos');
-
-  nombreInput.addEventListener('blur', () => {
-    const nombreIngresado = normalizarTexto(nombreInput.value);
-    const datosInvitado = invitados[nombreIngresado];
-
-    if (datosInvitado) {
-      errorNombre.classList.add('oculto');
-      seleccionInvitados.classList.remove('oculto');
-
-      adultosSelect.innerHTML = '';
-      for (let i = 0; i <= datosInvitado.maxAdultos; i++) {
-        adultosSelect.innerHTML += `<option value="${i}">${i}</option>`;
-      }
-
-      ninosSelect.innerHTML = '';
-      for (let i = 0; i <= datosInvitado.maxNinos; i++) {
-        ninosSelect.innerHTML += `<option value="${i}">${i}</option>`;
-      }
-    } else {
-      seleccionInvitados.classList.add('oculto');
-      errorNombre.classList.remove('oculto');
-    }
-  });
-
-  document.getElementById('rsvpForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-
-    const nombreOriginal = nombreInput.value.trim();
-    const nombreNormalizado = normalizarTexto(nombreOriginal);
-
-    const datosInvitado = invitados[nombreNormalizado];
-    if (!datosInvitado) {
-      errorNombre.classList.remove('oculto');
+    // Si el campo está vacío, no hay sugerencias que mostrar
+    if (inputValueNormalizado.length === 0) {
       return;
     }
 
-    const respuesta = document.getElementById('respuesta').value;
-    const adultos = adultosSelect.value;
-    const ninos = ninosSelect.value;
-    const comentarios = document.getElementById('comentarios').value.trim();
+    // Filtra los nombres de invitados que incluyen el texto normalizado del input
+    const matchedNames = Object.keys(invitados).filter(nameNormalizado =>
+      nameNormalizado.includes(inputValueNormalizado)
+    );
 
-    const numeroWhatsApp = "522282521819";
+    // Si hay nombres que coinciden, crea los elementos de sugerencia
+    if (matchedNames.length > 0) {
+      matchedNames.forEach((nameNormalizado) => {
+        const suggestionItem = document.createElement('div');
+        suggestionItem.classList.add('autocomplete-suggestion-item');
+        // Capitalizamos el nombre para mostrarlo de forma amigable (Ej: "Cristian Garcia")
+        suggestionItem.textContent = nameNormalizado.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+        // Guardamos el nombre normalizado en un atributo de datos para usarlo en la selección
+        suggestionItem.dataset.normalizedName = nameNormalizado; 
 
-    const mensaje = `Hola, soy ${nombreOriginal}.
-"${respuesta}".
-Asistiremos ${adultos} adulto(s) y ${ninos} niño(s).
-Comentarios: ${comentarios || 'Sin comentarios'}`;
+        // Cuando se hace clic en una sugerencia
+        suggestionItem.addEventListener('click', () => {
+          nombreInput.value = suggestionItem.textContent; // Rellena el input con el nombre capitalizado
+          autocompleteSuggestionsDiv.classList.add('oculto'); // Oculta las sugerencias
+          actualizarFormulario(); // Actualiza el formulario para validar el nombre y mostrar opciones
+        });
+        autocompleteSuggestionsDiv.appendChild(suggestionItem);
+      });
+      autocompleteSuggestionsDiv.classList.remove('oculto'); // Muestra el div de sugerencias
+      currentActiveSuggestion = -1; // Resetea el índice activo para la navegación con teclado
+    }
+  }
 
-    const url = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(mensaje)}`;
-    window.open(url, '_blank');
+  /**
+   * Permite navegar por las sugerencias de autocompletado usando las teclas de flecha
+   * y seleccionar con Enter.
+   * @param {KeyboardEvent} e El evento de teclado.
+   */
+  function navigateSuggestions(e) {
+    const items = autocompleteSuggestionsDiv.querySelectorAll('.autocomplete-suggestion-item');
+    if (items.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault(); // Previene que la flecha mueva el cursor en el input
+      currentActiveSuggestion = (currentActiveSuggestion + 1) % items.length;
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault(); // Previene que la flecha mueva el cursor en el input
+      currentActiveSuggestion = (currentActiveSuggestion - 1 + items.length) % items.length;
+    } else if (e.key === 'Enter') {
+      e.preventDefault(); // Previene el envío del formulario
+      if (currentActiveSuggestion > -1) {
+        items[currentActiveSuggestion].click(); // Simula un clic en la sugerencia activa
+      }
+      return; // La función de clic de la sugerencia ya llamará a actualizarFormulario()
+    }
+
+    // Remueve la clase 'active' de todas las sugerencias y la añade a la sugerencia actual
+    items.forEach((item, index) => {
+      if (index === currentActiveSuggestion) {
+        item.classList.add('active');
+        item.scrollIntoView({ block: 'nearest' }); // Desplaza para que la sugerencia sea visible
+      } else {
+        item.classList.remove('active');
+      }
+    });
+  }
+
+  // Oculta las sugerencias cuando se hace clic en cualquier parte fuera del input o del div de sugerencias
+  document.addEventListener('click', (e) => {
+    if (!nombreInput.contains(e.target) && !autocompleteSuggestionsDiv.contains(e.target)) {
+      autocompleteSuggestionsDiv.classList.add('oculto');
+    }
+  });
+
+  /**
+   * Actualiza el estado del formulario (validación del nombre, visibilidad de secciones).
+   */
+  function actualizarFormulario() {
+    const nombre = normalizar(nombreInput.value);
+    const datos = invitados[nombre];
+    const respuesta = respuestaSelect.value;
+    camposDiv.innerHTML = ""; // Limpia los campos de acompañantes cada vez que se actualiza
+
+    if (!datos) {
+      nombreInput.classList.add("invalido");
+      nombreInput.classList.remove("valido");
+      errorNombre.classList.remove("oculto");
+      btnEnviar.disabled = true;
+      seleccionInvitados.classList.add("oculto");
+      sugerenciasDiv.classList.add("oculto");
+      return;
+    }
+
+    nombreInput.classList.remove("invalido");
+    nombreInput.classList.add("valido");
+    errorNombre.classList.add("oculto");
+    
+    // El botón se habilita solo si el nombre es válido Y si se ha elegido una respuesta
+    btnEnviar.disabled = (respuesta === "");
+
+    if (respuesta === "Sí asistiré") {
+      seleccionInvitados.classList.remove("oculto");
+      adultosSelect.innerHTML = "";
+      ninosSelect.innerHTML = "";
+      // Rellena las opciones de números para adultos y niños
+      for (let i = 0; i <= datos.maxAdultos; i++) adultosSelect.innerHTML += `<option value="${i}">${i}</option>`;
+      for (let i = 0; i <= datos.maxNinos; i++) ninosSelect.innerHTML += `<option value="${i}">${i}</option>`;
+
+      // Establece los valores por defecto a 0 si no hay una selección previa
+      if (adultosSelect.value === "") adultosSelect.value = 0;
+      if (ninosSelect.value === "") ninosSelect.value = 0;
+
+      // Asigna manejadores de eventos para actualizar acompañantes al cambiar el número
+      adultosSelect.onchange = ninosSelect.onchange = mostrarAcompanantes;
+      mostrarAcompanantes(); // Llama inicialmente para mostrar acompañantes si hay valores por defecto
+    } else {
+      seleccionInvitados.classList.add("oculto");
+      sugerenciasDiv.classList.add("oculto");
+    }
+  }
+
+  /**
+   * Muestra los campos de entrada para los acompañantes (adultos adicionales y niños).
+   */
+  function mostrarAcompanantes() {
+    const nombre = normalizar(nombreInput.value);
+    const datos = invitados[nombre];
+    if (!datos) return; // Salir si no hay datos de invitado válidos
+
+    camposDiv.innerHTML = ""; // Limpia los campos de acompañantes existentes
+    const numAdultos = parseInt(adultosSelect.value || 0);
+    const numNinos = parseInt(ninosSelect.value || 0);
+    const sugeridos = datos.acompanantes || []; // Obtiene la lista de acompañantes sugeridos
+
+    // Genera campos para adultos adicionales (a partir del segundo adulto)
+    for (let i = 1; i < numAdultos; i++) { // Empieza desde 1 porque el Adulto 1 es el invitado principal
+      const label = document.createElement("label");
+      label.textContent = `Adulto ${i + 1}:`; // Nombra como Adulto 2, Adulto 3, etc.
+      const input = document.createElement("input");
+      input.type = "text";
+      input.name = `adulto_${i + 1}`;
+      input.value = sugeridos[i - 1] || ""; // Rellena con el nombre sugerido, si existe
+      camposDiv.appendChild(label);
+      camposDiv.appendChild(input);
+    }
+
+    // Genera campos para niños
+    for (let i = 1; i <= numNinos; i++) {
+      const label = document.createElement("label");
+      label.textContent = `Niño ${i}:`;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.name = `nino_${i}`;
+      // Calcula el índice en el array de sugeridos: primero van los adultos (si los hay), luego los niños
+      const indiceSugeridoNino = (numAdultos > 1 ? numAdultos - 1 : 0) + (i - 1);
+      input.value = sugeridos[indiceSugeridoNino] || "";
+      camposDiv.appendChild(label);
+      camposDiv.appendChild(input);
+    }
+
+    // Muestra la sección de acompañantes solo si hay más de un adulto o al menos un niño
+    if (numAdultos > 1 || numNinos > 0) {
+      sugerenciasDiv.classList.remove("oculto");
+    } else {
+      sugerenciasDiv.classList.add("oculto");
+    }
+  }
+
+  // --- Event Listeners principales ---
+  // Al escribir en el campo de nombre, muestra sugerencias y actualiza el formulario
+  nombreInput.addEventListener("input", (e) => {
+    showSuggestions(e.target.value);
+    actualizarFormulario();
+  });
+
+  // Permite navegar por las sugerencias con las flechas y Enter
+  nombreInput.addEventListener('keydown', navigateSuggestions);
+
+  // Al cambiar la respuesta de asistencia, actualiza el formulario
+  respuestaSelect.addEventListener("change", actualizarFormulario);
+
+  // Manejador del envío del formulario
+  document.getElementById("rsvpForm").addEventListener("submit", function (e) {
+    e.preventDefault(); // Evita el envío tradicional del formulario
+
+    const nombreOriginal = nombreInput.value.trim();
+    const nombreNormalizado = normalizar(nombreOriginal);
+    const datos = invitados[nombreNormalizado];
+
+    // Validación final antes de enviar
+    if (!datos) {
+      alert("Por favor, selecciona tu nombre de la lista de sugerencias o asegúrate de que esté correctamente escrito.");
+      nombreInput.focus(); // Devuelve el foco al campo de nombre
+      return;
+    }
+    
+    if (respuestaSelect.value === "") {
+        alert("Por favor, selecciona si asistirás o no.");
+        respuestaSelect.focus(); // Devuelve el foco al selector de respuesta
+        return;
+    }
+
+    const adultos = parseInt(adultosSelect.value || 0);
+    const ninos = parseInt(ninosSelect.value || 0);
+    const respuesta = respuestaSelect.value;
+    const comentarios = document.getElementById("comentarios").value.trim();
+    const numeroWhatsApp = "522282521819"; // ¡Asegúrate de que este sea el número correcto!
+    const acomp = [];
+
+    // Recopila los nombres de los acompañantes ingresados
+    document.querySelectorAll("#camposAcompanantes input").forEach(inp => {
+      if (inp.value.trim()) acomp.push(inp.value.trim());
+    });
+
+    // Construye el mensaje para WhatsApp
+    let msg = `Hola, soy ${nombreOriginal}.\n`;
+    msg += `"${respuesta}".\n`;
+
+    if (respuesta === "Sí asistiré") {
+      msg += `Asistiremos ${adultos} adulto(s) y ${ninos} niño(s).`;
+      if (acomp.length > 0) {
+        msg += `\nAcompañantes: ${acomp.join(", ")}`;
+      }
+    }
+
+    msg += `\nComentarios: ${comentarios || "Sin comentarios"}`;
+
+    // Codifica el mensaje para que sea seguro en la URL
+    const url = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank'); // Abre el enlace de WhatsApp en una nueva pestaña
+
+    mensajeConfirmacion.style.display = "block"; // Muestra el mensaje de confirmación
+
+    // Resetea el formulario y oculta elementos después del envío
+    this.reset(); // Limpia todos los campos del formulario
+    btnEnviar.disabled = true; // Deshabilita el botón de enviar
+    nombreInput.classList.remove("valido"); // Remueve el borde verde
+    nombreInput.classList.remove("invalido"); // Remueve el borde rojo
+    errorNombre.classList.add("oculto"); // Oculta el mensaje de error
+    seleccionInvitados.classList.add("oculto"); // Oculta la sección de selección de invitados
+    sugerenciasDiv.classList.add("oculto"); // Oculta la sección de acompañantes
+    autocompleteSuggestionsDiv.classList.add('oculto'); // Oculta las sugerencias de autocompletado
   });
 </script>
-
 </body>
 </html>
